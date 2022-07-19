@@ -26,7 +26,7 @@ func findPassed(path string, d os.DirEntry) {
 		}
 		count = 6 - count // There are a total of 6 test cases in task_test.go
 		// We get the GitHub Username by trimming of the first part of the string.
-		mtx.Lock()
+		mtx.Lock() // As we will access the common map.
 		taskPassed[strings.TrimPrefix(d.Name(), "recruitment-task-")] = count
 		mtx.Unlock()
 	}
@@ -42,7 +42,8 @@ func main() {
 			if d.IsDir() == true {
 				wg.Add(1)
 				go func() {
-					defer wg.Done()
+					// Wrapper function to implement waitgroups.
+					defer wg.Done() // To handle exceptions better.
 					findPassed(path, d)
 				}()
 			}
