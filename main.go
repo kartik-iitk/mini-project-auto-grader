@@ -15,10 +15,9 @@ var mtx sync.Mutex
 var taskPassed map[string]int
 
 func findPassed(path string, d os.DirEntry) {
-	mtx.Lock()
-	pwd, _ := os.Getwd() // Get current working directory
-	os.Chdir(path)       // Change it to the current path
-	result, _ := exec.Command("/usr/local/go/bin/go", "test").Output()
+	cmd := exec.Command("/usr/local/go/bin/go", "test")
+	cmd.Dir = path // Set Directory for running the command.
+	result, _ := cmd.Output()
 	testResult := string(result)
 	if testResult != "" {
 		count := strings.Count(testResult, "FAIL")
@@ -27,12 +26,10 @@ func findPassed(path string, d os.DirEntry) {
 		}
 		count = 6 - count // There are a total of 6 test cases in task_test.go
 		// We get the GitHub Username by trimming of the first part of the string.
-
+		mtx.Lock()
 		taskPassed[strings.TrimPrefix(d.Name(), "recruitment-task-")] = count
-
+		mtx.Unlock()
 	}
-	os.Chdir(pwd) // Reset the current directory for further walking
-	mtx.Unlock()
 }
 
 func main() {
