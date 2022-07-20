@@ -7,7 +7,7 @@ function for_loop {
             cd -- "$f";
 
             # delete all test files from user submission.
-            rm *_test.go
+            find . -type f -iname \*_test.go -delete
 
             # copy out task_test.go with an anti-cheating measure.
             cp ../../anti-cheating/task_test.go ./
