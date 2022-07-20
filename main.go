@@ -12,39 +12,30 @@ import (
 
 var wg sync.WaitGroup
 var mtx sync.Mutex
-var taskPassed map[string]int
+var taskStatus map[string]string
 
-func findPassed(path string, d os.DirEntry) {
-	userID := strings.TrimPrefix(d.Name(), "recruitment-task-")
-	if userID == d.Name() {
-		// Ignore all the other test case files present in nested directories as the directory name will not start
-		// recruitment-task- prefix!
-		return
-	}
-	cmd := exec.Command("/usr/local/go/bin/go", "test")
-	cmd.Dir = path // Set Directory for running the command.
+func findPassed(path string, userID string) {
+	cmd := exec.Command("/usr/local/go/bin/go", "test", "./...") // "./... runs tests of nested directories!
+	cmd.Dir = path                                               // Set Directory for running the command.
 	result, err := cmd.Output()
-	if werr, ok := err.(*exec.ExitError); ok {
-		// To handle the case where things other than task failed/succeeded happened. Eg: Build failed, etc.
-		if s := werr.Error(); s != "exit status 0" && s != "exit status 1" {
-			log.Println(path, ":", string(result)) // Print the log and ignore this for manual inspection.
-			return
+	mtx.Lock()
+	if err == nil {
+		// You should never compare errors other than nil with == operator. Use errors.Is() function!
+		taskStatus[userID] = "All Passed"
+	} else {
+		// In case, there is failure, instead of parsing the result for "FAIL" it is a better strategy to simply
+		// log the result for manual inspection and flag as failed. This keeps the code reusable.
+		log.Println(userID, ":", string(result))
+		// Get error code. Avoid parsing using err.Errors() method.
+		code := err.(*exec.ExitError).ExitCode() // type assertion coupled with ProcessorState function to get ErrCode.
+		switch code {
+		case 1:
+			taskStatus[userID] = "Some Tests Failed"
+		default:
+			taskStatus[userID] = "Other Error"
 		}
 	}
-	testResult := string(result)
-	if testResult != "" {
-		count := strings.Count(testResult, "FAIL")
-		if count > 0 {
-			count-- // One extra FAIL occurs in the string
-		}
-		// There are a total of 6 test cases in task_test.go, we assume there is no other test
-		// file (as the bash script ensures this).
-		count = 6 - count
-		// We get the GitHub Username by trimming of the first part of the string.
-		mtx.Lock() // As we will access the common map.
-		taskPassed[userID] = count
-		mtx.Unlock()
-	}
+	mtx.Unlock()
 }
 
 func main() {
@@ -53,19 +44,24 @@ func main() {
 	cmd.Dir = "./anti-cheating"
 	cmd.Run()
 
+	// Initialisation
+	taskStatus = make(map[string]string)
+
 	// Begin testing
-	taskPassed = make(map[string]int)
-	var err = filepath.WalkDir("./submission-data",
+	maxDepth := 1 // For WalkDir function, 0 is the root directory from where we start executing the function.
+	var err = filepath.WalkDir("./submission-data/",
 		func(path string, d os.DirEntry, err1 error) error {
 			if err1 != nil {
 				return err1
 			}
-			if d.IsDir() == true {
+			if d.IsDir() == true && strings.Count(path, string(os.PathSeparator)) <= maxDepth {
+				// We get the GitHub Username by trimming of the first part of the string.
+				userID := strings.TrimPrefix(d.Name(), "recruitment-task-")
 				wg.Add(1)
 				go func() {
-					// Wrapper function to implement waitgroups.
+					// Wrapper function to implement wait-groups.
 					defer wg.Done() // To handle exceptions better.
-					findPassed(path, d)
+					findPassed(path, userID)
 				}()
 			}
 			return nil
@@ -74,5 +70,5 @@ func main() {
 		log.Println(err)
 	}
 	wg.Wait()
-	fmt.Println(taskPassed)
+	fmt.Println(taskStatus)
 }
