@@ -15,6 +15,12 @@ var mtx sync.Mutex
 var taskPassed map[string]int
 
 func findPassed(path string, d os.DirEntry) {
+	userID := strings.TrimPrefix(d.Name(), "recruitment-task-")
+	if userID == d.Name() {
+		// Ignore all the other test case files present in nested directories as the directory name will not start
+		// recruitment-task- prefix!
+		return
+	}
 	cmd := exec.Command("/usr/local/go/bin/go", "test")
 	cmd.Dir = path // Set Directory for running the command.
 	result, err := cmd.Output()
@@ -31,15 +37,23 @@ func findPassed(path string, d os.DirEntry) {
 		if count > 0 {
 			count-- // One extra FAIL occurs in the string
 		}
-		count = 6 - count // There are a total of 6 test cases in task_test.go
+		// There are a total of 6 test cases in task_test.go, we assume there is no other test
+		// file (as the bash script ensures this).
+		count = 6 - count
 		// We get the GitHub Username by trimming of the first part of the string.
 		mtx.Lock() // As we will access the common map.
-		taskPassed[strings.TrimPrefix(d.Name(), "recruitment-task-")] = count
+		taskPassed[userID] = count
 		mtx.Unlock()
 	}
 }
 
 func main() {
+	// Apply anti-cheating measure by executing the bash-script, which deletes all test files and puts in our test file.
+	cmd := exec.Command("bash", "applyAntiCheatingMeasure.sh")
+	cmd.Dir = "./anti-cheating"
+	cmd.Run()
+
+	// Begin testing
 	taskPassed = make(map[string]int)
 	var err = filepath.WalkDir("./submission-data",
 		func(path string, d os.DirEntry, err1 error) error {
