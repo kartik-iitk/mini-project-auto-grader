@@ -5,8 +5,13 @@ function for_loop {
         if [ -d $f  -a ! -h $f ];
         then
             cd -- "$f";
-	        # create/overwrite existing task_test.go with our file as an anti-cheating measure.
-	        cp ../../anti-ceating/task_test.go ./
+
+            # delete all test files from user submission.
+            rm *_test.go
+
+            # copy out task_test.go with an anti-cheating measure.
+            cp ../../anti-cheating/task_test.go ./
+
             cd ..;
         fi;
     done;
