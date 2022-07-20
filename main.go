@@ -17,7 +17,14 @@ var taskPassed map[string]int
 func findPassed(path string, d os.DirEntry) {
 	cmd := exec.Command("/usr/local/go/bin/go", "test")
 	cmd.Dir = path // Set Directory for running the command.
-	result, _ := cmd.Output()
+	result, err := cmd.Output()
+	if werr, ok := err.(*exec.ExitError); ok {
+		// To handle the case where things other than task failed/succeded happened. Eg: Build failed, etc.
+		if s := werr.Error(); s != "exit status 0" && s != "exit status 1" {
+			log.Println(path, ":", string(result)) // Print the log and ignore this for manual inspection.
+			return
+		}
+	}
 	testResult := string(result)
 	if testResult != "" {
 		count := strings.Count(testResult, "FAIL")
