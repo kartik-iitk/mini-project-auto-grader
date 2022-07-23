@@ -8,25 +8,20 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
-var taskStatus map[string]string
 var wg sync.WaitGroup
-var pollingTime time.Duration
+var mtx sync.Mutex
+var taskStatus map[string]string
 
-type pair struct {
-	id  string
-	res string
-}
-
-func findPassed(path string, userID string, c chan pair) {
+func findPassed(path string, userID string) {
 	cmd := exec.Command("/usr/local/go/bin/go", "test", "./...") // "./... runs tests of nested directories!
 	cmd.Dir = path                                               // Set Directory for running the command.
 	result, err := cmd.Output()
+	mtx.Lock()
 	if err == nil {
 		// You should never compare errors other than nil with == operator. Use errors.Is() function!
-		c <- pair{userID, "All Passed"}
+		taskStatus[userID] = "All Passed"
 	} else {
 		// In case, there is failure, instead of parsing the result for "FAIL" it is a better strategy to simply
 		// log the result for manual inspection and flag as failed. This keeps the code reusable.
@@ -35,26 +30,12 @@ func findPassed(path string, userID string, c chan pair) {
 		code := err.(*exec.ExitError).ExitCode() // type assertion coupled with ProcessorState function to get ErrCode.
 		switch code {
 		case 1:
-			c <- pair{userID, "Some Tests Failed"}
+			taskStatus[userID] = "Some Tests Failed"
 		default:
-			c <- pair{userID, "Other Error"}
+			taskStatus[userID] = "Other Error"
 		}
 	}
-}
-
-func updateMap(c chan pair, exit chan int) {
-	fmt.Println("Start updateMap", c)
-	for {
-		select {
-		case p := <-c:
-			time.Sleep(pollingTime) // Channel Polling Frequency
-			taskStatus[p.id] = p.res
-		case <-exit: // Something has been written on exit channel
-			close(c)
-			close(exit)
-			return
-		}
-	}
+	mtx.Unlock()
 }
 
 func main() {
@@ -65,12 +46,8 @@ func main() {
 
 	// Initialisation
 	taskStatus = make(map[string]string)
-	c := make(chan pair)
-	exit := make(chan int)
-	pollingTime = 1e6
 
 	// Begin testing
-	go updateMap(c, exit)
 	maxDepth := 1 // For WalkDir function, 0 is the root directory from where we start executing the function.
 	var err = filepath.WalkDir("./submission-data/",
 		func(path string, d os.DirEntry, err1 error) error {
@@ -84,7 +61,7 @@ func main() {
 				go func() {
 					// Wrapper function to implement wait-groups.
 					defer wg.Done() // To handle exceptions better.
-					findPassed(path, userID, c)
+					findPassed(path, userID)
 				}()
 			}
 			return nil
@@ -93,7 +70,5 @@ func main() {
 		log.Println(err)
 	}
 	wg.Wait()
-	time.Sleep(pollingTime) // To prevent main() from terminating before updateMap() can update the map for the last entry.
-	exit <- 0               // To exit from updateMap()
 	fmt.Println(taskStatus)
 }
