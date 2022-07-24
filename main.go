@@ -45,9 +45,9 @@ func findPassed(path string, userID string, c chan pair) {
 func updateMap(c chan pair, exit chan int) {
 	fmt.Println("Start updateMap", c)
 	for {
+		time.Sleep(pollingTime) // Channel Polling Frequency
 		select {
 		case p := <-c:
-			time.Sleep(pollingTime) // Channel Polling Frequency
 			taskStatus[p.id] = p.res
 		case <-exit: // Something has been written on exit channel
 			close(c)
