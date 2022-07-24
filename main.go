@@ -7,11 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 var taskStatus map[string]string
-var pollingTime time.Duration
 
 type pair struct {
 	id  string
@@ -41,10 +39,9 @@ func findPassed(path string, userID string, c chan pair) {
 }
 
 func updateMap(c chan pair, exit chan int) {
-	fmt.Println("Start updateMap", c)
 	for {
-		time.Sleep(pollingTime) // Channel Polling Frequency to reduce CPU usage.
 		select {
+		// Implements sleep so that it works the moment any case becomes true.
 		case p := <-c:
 			taskStatus[p.id] = p.res
 		case <-exit: // Something has been written on exit channel
@@ -61,12 +58,10 @@ func main() {
 	cmd.Dir = "./anti-cheating"
 	cmd.Run()
 
-	// Initialisation
 	taskStatus = make(map[string]string)
-	// Allows easy communication between goroutines, so that the map can be accessed while some goroutines execute!
+	// Channel allow easy communication between goroutines, so that map can be accessed while some goroutines execute!
 	c := make(chan pair)
 	exit := make(chan int)
-	pollingTime = 1e6
 	concurrency := 10
 	// A buffered channel (semaphore) which can hold only 'concurrency' ints. Helps limit number of Goroutines.
 	// Mutex limits things to one thread, while semaphores limits things to 'concurrency' number of threads.
@@ -83,7 +78,7 @@ func main() {
 			if d.IsDir() == true && strings.Count(path, string(os.PathSeparator)) <= maxDepth {
 				// We get the GitHub Username by trimming of the first part of the string.
 				userID := strings.TrimPrefix(d.Name(), "recruitment-task-")
-				sem <- 1 // Same as wg.Add(), we add a new int to the channel.
+				sem <- 1 // Add a new int to the channel if space is available, else wait until then!
 				go func() {
 					// Wrapper function to implement the buffered channels.
 					// We could have simply written "<- sem" after findPassed call.
@@ -102,7 +97,6 @@ func main() {
 		// running so we need to wait for them to finish. Similar to wg.Wait() function.
 		sem <- 1
 	}
-	time.Sleep(pollingTime) // Prevent main() from terminating before updateMap() can update the map for the last entry.
-	exit <- 0               // Exit from updateMap() by pushing 0 to the channel
+	exit <- 0 // Exit from updateMap() by pushing 0 to the channel
 	fmt.Println(taskStatus)
 }
