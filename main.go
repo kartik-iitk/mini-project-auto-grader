@@ -94,7 +94,7 @@ func main() {
 	}
 	for i := 0; i < cap(sem); i++ {
 		// When the last goroutine is pushed to the buffered channel, there are still 'concurrency' amount of goroutines
-		// running so we need to wait for them to finish. Similar to wg.Wait() function.
+		// running, so we need to wait for them to finish. Similar to wg.Wait() function.
 		sem <- 1
 	}
 	exit <- 0 // Exit from updateMap() by pushing 0 to the channel
